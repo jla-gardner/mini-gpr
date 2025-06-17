@@ -1,0 +1,27 @@
+[project]
+name = "mini-gpr"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "John Gardner", email = "gardner.john97+dphil@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "jaxtyping>=0.3.2",
+    "numpy>=2.3.0",
+]
+
+[project.scripts]
+mini-gpr = "mini_gpr:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.10.3",
+    "notebook>=7.4.3",
+    "ruff>=0.11.13",
+]
