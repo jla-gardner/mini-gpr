@@ -7,7 +7,7 @@ from jaxtyping import Float
 
 class Selector(Protocol):
     def __call__(
-        self, X: Float[np.ndarray, "A D"], n: int
+        self, X: Float[np.ndarray, "N D"], n: int
     ) -> Float[np.ndarray, "n D"]: ...
 
 
@@ -16,7 +16,7 @@ class RandomSelector(Selector):
         self.seed = seed
 
     def __call__(
-        self, X: Float[np.ndarray, "A D"], n: int
+        self, X: Float[np.ndarray, "N D"], n: int
     ) -> Float[np.ndarray, "n D"]:
         A = len(X)
         if n > A:

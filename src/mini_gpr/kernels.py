@@ -12,8 +12,8 @@ from .utils import ensure_2d
 class Kernel(Protocol):
     def __call__(
         self,
-        A: Float[np.ndarray, "A D"],
-        B: Float[np.ndarray, "B D"],
+        A: Float[np.ndarray, "N D"],
+        B: Float[np.ndarray, "T D"],
     ) -> Float[np.ndarray, "A B"]: ...
 
 
@@ -23,7 +23,7 @@ class SumKernel(Kernel):
 
     @ensure_2d("A", "B")
     def __call__(
-        self, A: Float[np.ndarray, "A D"], B: Float[np.ndarray, "B D"]
+        self, A: Float[np.ndarray, "N D"], B: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "A B"]:
         return np.sum([kernel(A, B) for kernel in self.kernels], axis=0)
 
@@ -34,14 +34,14 @@ class ProductKernel(Kernel):
 
     @ensure_2d("A", "B")
     def __call__(
-        self, A: Float[np.ndarray, "A D"], B: Float[np.ndarray, "B D"]
+        self, A: Float[np.ndarray, "N D"], B: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "A B"]:
         return np.prod([kernel(A, B) for kernel in self.kernels], axis=0)
 
 
 @ensure_2d("A", "B")
 def cdist(
-    A: Float[np.ndarray, "A D"], B: Float[np.ndarray, "B D"]
+    A: Float[np.ndarray, "N D"], B: Float[np.ndarray, "T D"]
 ) -> Float[np.ndarray, "A B"]:
     residuals = A[:, None, :] - B[None, :, :]  # (A, B, D)
     return np.sqrt(np.sum(residuals**2, axis=2))  # (A, B)
@@ -53,13 +53,13 @@ class RBF(Kernel):
 
     @ensure_2d("A", "B")
     def __call__(
-        self, A: Float[np.ndarray, "A D"], B: Float[np.ndarray, "B D"]
+        self, A: Float[np.ndarray, "N D"], B: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "A B"]:
         return np.exp(-(cdist(A, B) ** 2) / (2 * self.sigma**2))
 
 
 @ensure_2d("A", "B")
 def DotProduct(
-    A: Float[np.ndarray, "A D"], B: Float[np.ndarray, "B D"]
+    A: Float[np.ndarray, "N D"], B: Float[np.ndarray, "T D"]
 ) -> Float[np.ndarray, "A B"]:
     return np.einsum("ad,bd->ab", A, B)

@@ -4,18 +4,18 @@ from jaxtyping import Float
 from .full import GPR
 from .kernels import RBF
 from .sparse import SparseGPR
-from .utils import Model
+from .utils import UncertaintyModel
 
 __version__ = "0.1.0"
 
 
-def model_data(
-    X: Float[np.ndarray, "A D"],
-    y: Float[np.ndarray, "A"],
+def auto_fit_gpr(
+    X: Float[np.ndarray, "N D"],
+    y: Float[np.ndarray, "N"],
     lengthscale: float = 1.0,
-    noise: float = 1e-8,
+    noise: float = 1e-2,
     sparsify: bool | int | None = None,
-) -> Model:
+) -> UncertaintyModel:
     """
     Quickly create a GPR model for the given data.
 

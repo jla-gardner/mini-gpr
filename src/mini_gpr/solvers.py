@@ -16,8 +16,8 @@ class LinearSolver(Protocol):
     def __call__(
         self,
         A: Float[np.ndarray, "A B"],
-        y: Float[np.ndarray, "A"],
-    ) -> Float[np.ndarray, "A"]: ...
+        y: Float[np.ndarray, "N"],
+    ) -> Float[np.ndarray, "N"]: ...
 
 
 @ensure_2d("A")

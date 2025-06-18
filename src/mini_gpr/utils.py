@@ -1,8 +1,8 @@
 # ruff: noqa: F722, F821
 
-from abc import ABC, abstractmethod
 from functools import wraps
 from inspect import signature
+from typing import Protocol
 
 import numpy as np
 from jaxtyping import Float
@@ -32,23 +32,36 @@ def ensure_2d(*var_names):
     return decorator
 
 
-class Model(ABC):
-    @abstractmethod
+class Model(Protocol):
     def fit(
-        self, X: Float[np.ndarray, "A D"], y: Float[np.ndarray, "A"]
+        self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]
     ): ...
 
-    @abstractmethod
     def predict(
-        self, X: Float[np.ndarray, "B D"]
-    ) -> Float[np.ndarray, "B"]: ...
+        self, T: Float[np.ndarray, "T D"]
+    ) -> Float[np.ndarray, "T"]: ...
 
-    def __call__(
-        self, X: Float[np.ndarray, "B D"]
-    ) -> Float[np.ndarray, "B"]:
-        return self.predict(X)
 
+class UncertaintyModel(Model, Protocol):
     def uncertainty(
-        self, X: Float[np.ndarray, "B D"]
-    ) -> Float[np.ndarray, "B"]:
-        return np.nan * np.ones(X.shape[0])
+        self, T: Float[np.ndarray, "T D"]
+    ) -> Float[np.ndarray, "T"]: ...
+
+
+class ModelStack(Model):
+    # no type hint here to allow sklearn models to be passed
+    def __init__(self, *models):
+        self.models = models
+
+    def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]):
+        for model in self.models:
+            model.fit(X, y)
+            y = y - model.predict(X)
+
+    def predict(
+        self, T: Float[np.ndarray, "T D"]
+    ) -> Float[np.ndarray, "T"]:
+        return np.sum([model.predict(T) for model in self.models], axis=0)
+
+    def __getitem__(self, key: int) -> Model:
+        return self.models[key]
