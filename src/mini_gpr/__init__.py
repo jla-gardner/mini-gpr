@@ -1,9 +1,8 @@
 import numpy as np
 from jaxtyping import Float
 
-from .full import GPR
 from .kernels import RBF
-from .sparse import SparseGPR
+from .models import GPR, SoR
 from .utils import UncertaintyModel
 
 __version__ = "0.1.0"
