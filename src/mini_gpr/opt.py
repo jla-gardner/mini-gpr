@@ -14,22 +14,60 @@ def maximise_log_likelihood(model: Model):
     return -model.log_likelihood
 
 
+def validation_set_mse(
+    X: Float[np.ndarray, "N D"],
+    y: Float[np.ndarray, "N"],
+) -> Objective:
+    def func(model: Model):
+        yy = model.predict(X)
+        return np.mean((y - yy) ** 2).item()
+
+    return func
+
+
+def validation_set_log_likelihood(
+    X: Float[np.ndarray, "N D"],
+    y: Float[np.ndarray, "N"],
+) -> Objective:
+    def func(model: Model):
+        yy = model.predict(X)
+        std = model.predictive_uncertainty(X)
+        # normal distribution likelihoods
+        ls = (
+            1
+            / (std * np.sqrt(2 * np.pi))
+            * np.exp(-((y - yy) ** 2) / (2 * std**2))
+        )  # (N,)
+
+        # take logs and sum
+        return np.sum(np.log(ls)).item()
+
+    return func
+
+
 class Convertor:
-    def __init__(self, params: dict[str, np.ndarray]):
+    def __init__(self, params: dict[str, float | list[float]]):
         self.og_params = params
 
-    def to_list(self, params: dict[str, np.ndarray]) -> list[float]:
+    def to_list(self, params: dict[str, float | list[float]]) -> list[float]:
         l = []
         for v in params.values():
-            l.extend(v.reshape(-1).tolist())
+            if isinstance(v, list):
+                l.extend(v)
+            else:
+                l.append(v)
         return l
 
-    def to_dict(self, params: list[float]) -> dict[str, np.ndarray]:
+    def to_dict(self, params: list[float]) -> dict[str, float | list[float]]:
         d = {}
         left = 0
         for k, v in self.og_params.items():
-            right = left + len(v.reshape(-1))
-            d[k] = np.array(params[left:right])
+            if isinstance(v, list):
+                right = left + len(v)
+                d[k] = params[left:right]
+            else:
+                right = left + 1
+                d[k] = params[left]
             left = right
         return d
 
@@ -53,19 +91,23 @@ def optimise_model(
 
     convertor = Convertor(m.kernel.params)
 
+    # stuff parameters into a list in the order:
+    # kernel params, sparse points, noise
+
     def params_to_model(params: list[float]) -> Model:
         noise = params.pop() if optimise_noise else m.noise
+
         param_dict = convertor.to_dict(params)
         new_kernel = m.kernel.with_new(param_dict)
         return m.with_new(new_kernel, noise)
 
     def _objective(params: list[float]):
         try:
-            new_model = params_to_model(params)
+            new_model = params_to_model(list(params))
             new_model.fit(X, y)
             return objective(new_model)
         except Exception:
-            return 1e10
+            return 1e33
 
     starting_params = convertor.to_list(m.kernel.params)
     if optimise_noise:
@@ -77,6 +119,6 @@ def optimise_model(
         starting_params,
         options={"maxiter": max_iterations},
     ).x
-    m = params_to_model(best_params)
+    m = params_to_model(list(best_params))
     m.fit(X, y)
     return m

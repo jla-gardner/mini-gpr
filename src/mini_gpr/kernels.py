@@ -1,6 +1,7 @@
 # ruff: noqa: F722, F821
 
 from abc import ABC, abstractmethod
+from copy import deepcopy
 
 import numpy as np
 from jaxtyping import Float
@@ -8,7 +9,13 @@ from jaxtyping import Float
 from mini_gpr.utils import ensure_2d
 
 
+# TODO: diag method
+
+
 class Kernel(ABC):
+    def __init__(self, params: dict[str, float | list[float]]):
+        self.params = params
+
     @abstractmethod
     def __call__(
         self,
@@ -16,18 +23,20 @@ class Kernel(ABC):
         B: Float[np.ndarray, "T D"],
     ) -> Float[np.ndarray, "A B"]: ...
 
-    @property
-    @abstractmethod
-    def params(self) -> dict[str, Float[np.ndarray, "P"]]: ...
-
-    @abstractmethod
-    def with_new(
-        self, params: dict[str, Float[np.ndarray, "P"]]
-    ) -> "Kernel": ...
+    def with_new(self, params: dict[str, float | list[float]]) -> "Kernel":
+        copy = deepcopy(self)
+        copy.params = params
+        return copy
 
     def __repr__(self):
         name = self.__class__.__name__
-        params = [f"{k}={v}" for k, v in self.params.items()]
+        params = []
+        for k, v in self.params.items():
+            if isinstance(v, list):
+                vv = "[" + ", ".join(f"{x:.2e}" for x in v) + "]"
+            else:
+                vv = f"{v:.2e}"
+            params.append(f"{k}={vv}")
         return f"{name}({', '.join(params)})"
 
     def __add__(self, other: "Kernel") -> "SumKernel":
@@ -48,102 +57,26 @@ class Kernel(ABC):
                 kernels.append(thing)
         return ProductKernel(*kernels)
 
-
-class RBF(Kernel):
-    def __init__(
-        self,
-        sigma: float | Float[np.ndarray, "D"] = 1.0,
-        scale: float = 1.0,
-    ):
-        self.sigma = np.array(sigma)
-        self.scale = scale
-
-    @ensure_2d("A", "B")
-    def __call__(self, A, B):
-        norm_A = A / self.sigma
-        norm_B = B / self.sigma
-        k = (norm_A[:, None, :] - norm_B[None, :, :]) ** 2
-        return np.exp(-k.sum(axis=2) / 2) * self.scale
-
-    @property
-    def params(self):
-        return {"scale": np.array(self.scale), "sigma": np.array(self.sigma)}
-
-    def with_new(self, params) -> "RBF":
-        return RBF(sigma=params["sigma"], scale=params["scale"].item())
-
-
-class DotProduct(Kernel):
-    def __init__(self, scale: float = 1.0):
-        self.scale = scale
-
-    def __call__(self, A, B):
-        return np.einsum("ad,bd->ab", A, B) * self.scale
-
-    @property
-    def params(self):
-        return {"scale": np.array(self.scale)}
-
-    def with_new(self, params) -> "DotProduct":
-        return DotProduct(scale=params["scale"].item())
-
-
-class Constant(Kernel):
-    def __init__(self, value: float = 1.0):
-        self.value = value
-
-    def __call__(self, A, B):
-        return np.ones((A.shape[0], B.shape[0])) * self.value
-
-    @property
-    def params(self):
-        return {"value": np.array(self.value)}
-
-    def with_new(self, params) -> "Constant":
-        return Constant(value=params["value"].item())
-
-
-class Linear(Kernel):
-    def __init__(self, m: float | Float[np.ndarray, "D"], scale: float = 1.0):
-        self.m = np.array(m)
-        self.scale = scale
-
-    def __call__(self, A, B):
-        return np.einsum("ad,bd->ab", A - self.m, B - self.m) * self.scale
-
-    @property
-    def params(self):
-        return {"m": np.array(self.m), "scale": np.array(self.scale)}
-
-    def with_new(self, params) -> "Linear":
-        return Linear(m=params["m"], scale=params["scale"].item())
+    def __pow__(self, other: float) -> "PowerKernel":
+        return PowerKernel(power=other, kernel=self)
 
 
 class MultiKernel(Kernel):
     def __init__(self, *kernels: Kernel):
-        self.kernels = kernels
-
-    @property
-    def params(self) -> dict[str, Float[np.ndarray, "P"]]:
-        params: dict[str, Float[np.ndarray, "P"]] = {}
+        self.kernels = list(kernels)
+        params = {}
         for i, kernel in enumerate(self.kernels):
             updated_keys = {f"{i}-{k}": p for k, p in kernel.params.items()}
             params.update(updated_keys)
-        return params
+        super().__init__(params)
 
-    def with_new(
-        self, params: dict[str, Float[np.ndarray, "P"]]
-    ) -> "MultiKernel":
-        kernels = []
+    def with_new(self, params: dict[str, float | list[float]]) -> "MultiKernel":
+        new_kernels = []
         for i, kernel in enumerate(self.kernels):
-            old_keys = {f"{i}-{k}" for k in kernel.params}
-            new_kernel_params = {
-                k.removeprefix(f"{i}-"): v
-                for k, v in params.items()
-                if k in old_keys
-            }
-            kernels.append(kernel.with_new(new_kernel_params))
-        return self.__class__(*kernels)
+            actual_params = {k: params[f"{i}-{k}"] for k in kernel.params}
+            new_kernels.append(kernel.with_new(actual_params))
+
+        return self.__class__(*new_kernels)
 
     def __repr__(self):
         name = self.__class__.__name__
@@ -153,52 +86,112 @@ class MultiKernel(Kernel):
 
 class SumKernel(MultiKernel):
     @ensure_2d("A", "B")
-    def __call__(
-        self,
-        A: Float[np.ndarray, "N D"],
-        B: Float[np.ndarray, "T D"],
-    ) -> Float[np.ndarray, "A B"]:
-        return np.sum(
-            [kernel(A, B) for kernel in self.kernels],
-            axis=0,
-        )
+    def __call__(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
+        values = [kernel(A, B) for kernel in self.kernels]
+        return np.sum(values, axis=0)
 
 
 class ProductKernel(MultiKernel):
     @ensure_2d("A", "B")
-    def __call__(
-        self,
-        A: Float[np.ndarray, "N D"],
-        B: Float[np.ndarray, "T D"],
-    ) -> Float[np.ndarray, "A B"]:
-        return np.prod(
-            [kernel(A, B) for kernel in self.kernels],
-            axis=0,
-        )
+    def __call__(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
+        values = [kernel(A, B) for kernel in self.kernels]
+        return np.prod(values, axis=0)
 
 
 class PowerKernel(Kernel):
     def __init__(self, power: float, kernel: Kernel):
-        self.power = power
+        super().__init__(kernel.params)
         self.kernel = kernel
+        self.power = power
 
     @ensure_2d("A", "B")
-    def __call__(
-        self,
-        A: Float[np.ndarray, "N D"],
-        B: Float[np.ndarray, "T D"],
-    ) -> Float[np.ndarray, "A B"]:
+    def __call__(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
         return self.kernel(A, B) ** self.power
 
-    @property
-    def params(self) -> dict[str, Float[np.ndarray, "P"]]:
-        params = {f"wrapped-{k}": v for k, v in self.kernel.params.items()}
-        params["power"] = np.array(self.power)
-        return params
-
     def with_new(self, params) -> "PowerKernel":
-        power = params.pop("power").item()
-        kernel = self.kernel.with_new(
-            {k.removeprefix("wrapped-"): v for k, v in params.items()}
+        kernel = self.kernel.with_new(params)
+        return PowerKernel(power=self.power, kernel=kernel)
+
+
+class RBF(Kernel):
+    def __init__(
+        self,
+        sigma: float | list[float] = 1.0,
+        scale: float = 1.0,
+    ):
+        super().__init__(params={"sigma": sigma, "scale": scale})
+
+    @ensure_2d("A", "B")
+    def __call__(self, A, B):
+        sigma, scale = self.params["sigma"], self.params["scale"]
+        assert isinstance(scale, float | int)
+        sigma = np.abs(sigma)
+
+        norm_A = A / sigma
+        norm_B = B / sigma
+        k = (norm_A[:, None, :] - norm_B[None, :, :]) ** 2
+        return np.exp(-k.sum(axis=2) / 2) * scale**2
+
+
+class DotProduct(Kernel):
+    def __init__(self, scale: float = 1.0):
+        super().__init__(params={"scale": scale})
+
+    def __call__(self, A, B):
+        scale = self.params["scale"]
+        assert isinstance(scale, float | int)
+        return np.einsum("ad,bd->ab", A, B) * scale**2
+
+
+class Constant(Kernel):
+    def __init__(self, value: float = 1.0):
+        super().__init__(params={"value": value})
+
+    def __call__(self, A, B):
+        value = self.params["value"]
+        assert isinstance(value, float | int)
+        return np.ones((A.shape[0], B.shape[0])) * value**2
+
+
+class Linear(Kernel):
+    def __init__(self, m: float | list[float], scale: float = 1.0):
+        super().__init__(params={"m": m, "scale": scale})
+
+    def __call__(self, A, B):
+        m, scale = self.params["m"], self.params["scale"]
+        assert isinstance(scale, float | int)
+
+        return np.einsum("ad,bd->ab", A - m, B - m) * scale**2
+
+
+class Periodic(Kernel):
+    def __init__(
+        self,
+        sigma: float = 1.0,
+        period: float | list[float] = 1.0,
+        lengthscale: float | list[float] = 1.0,
+    ):
+        super().__init__(
+            params={
+                "sigma": sigma,
+                "period": period,
+                "lengthscale": lengthscale,
+            }
         )
-        return PowerKernel(power=power, kernel=kernel)
+
+    @ensure_2d("A", "B")
+    def __call__(self, A, B):
+        sigma = self.params["sigma"]
+        assert isinstance(sigma, float | int)
+        period = self.params["period"]
+        lengthscale = self.params["lengthscale"]
+
+        # all shapes are (N, M, D)
+        diff = A[:, None, :] - B[None, :, :]
+        sin_terms = np.sin(np.pi * np.abs(diff) / period) ** 2
+        exp_terms = -2 * sin_terms / np.power(lengthscale, 2)
+
+        # shape is (N, M)
+        exp_term = np.sum(exp_terms, axis=2)
+
+        return (sigma**2) * np.exp(exp_term)

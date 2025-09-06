@@ -55,29 +55,3 @@ $$\bar{f}_{*,\text{SoR}} = K_{tm} (K_{mn}K_{nm} + \sigma_{\epsilon}^2 K_{mm})^{-
 The **SoR predictive covariance**, $\text{cov}(f_{*,\text{SoR}})$, is given by:
 $$\text{cov}(f_{*,\text{SoR}}) = K(T, T) - K_{tm} K_{mm}^{-1} K_{mt} + \sigma_{\epsilon}^2 K_{tm} (K_{mn}K_{nm} + \sigma_{\epsilon}^2 K_{mm})^{-1} K_{mt}$$
 
-
----
-
-# FITC
-
-The Fully Independent Training Conditional (FITC) is a sparse approximation method for Gaussian Processes that is particularly useful when the number of training points, $N$, is large. It introduces a set of $M$ inducing points, where $M < N$, to create a low-rank approximation of the full covariance matrix.
-
-The core idea behind FITC is to assume that the training data points are conditionally independent given the inducing points. This simplifies the model by making the approximate covariance matrix of the training outputs, $K(X, X)$, sparse.
-
-Given your inducing point locations, $M \in \mathbb{R}^{M \times d}$, the updated equations for the predictive mean and covariance at test points $T \in \mathbb{R}^{T \times d}$ are as follows.
-
-First, we define a shorthand notation for the kernel covariance matrices:
-* $K_{mm} = K(M, M)$ is the $M \times M$ covariance matrix between the inducing points.
-* $K_{mn} = K(M, X)$ is the $M \times N$ covariance matrix between the inducing and training points.
-* $K_{nn} = K(X, X)$ is the $N \times N$ covariance matrix between the training points.
-* $K_{tm} = K(T, M)$ is the $T \times M$ covariance matrix between the test and inducing points.
-
-A key component in the FITC approximation is the diagonal matrix $\Lambda$:
-$$\Lambda = \text{diag}[K_{nn} - K_{nm}K_{mm}^{-1}K_{mn}]$$
-This $N \times N$ diagonal matrix captures the variance of each training point that is not explained by the inducing points. Let's denote its diagonal elements as $\Lambda_{ii}$.
-
-The **FITC predictive mean**, $\bar{f}_{*,\text{FITC}}$, is given by:
-$$\bar{f}_{*,\text{FITC}} = K_{tm} (K_{mm} + K_{mn}(\Lambda + \sigma_{\epsilon}^2 I)^{-1}K_{nm})^{-1} K_{mn} (\Lambda + \sigma_{\epsilon}^2 I)^{-1} y$$
-
-The **FITC predictive covariance**, $\text{cov}(f_{*,\text{FITC}})$, is given by:
-$$\text{cov}(f_{*,\text{FITC}}) = K(T, T) - K_{tm}K_{mm}^{-1}K_{mt} + K_{tm} (K_{mm} + K_{mn}(\Lambda + \sigma_{\epsilon}^2 I)^{-1}K_{nm})^{-1} K_{mt}$$

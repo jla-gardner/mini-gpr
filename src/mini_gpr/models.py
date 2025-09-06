@@ -6,15 +6,20 @@ import numpy as np
 from jaxtyping import Float
 
 from mini_gpr.kernels import Kernel
-from mini_gpr.selection import RandomSelector, Selector
 from mini_gpr.solvers import LinearSolver, vanilla
 from mini_gpr.utils import ensure_2d
 
 
 class Model(ABC):
-    def __init__(self, kernel: Kernel, noise: float):
+    def __init__(
+        self,
+        kernel: Kernel,
+        noise: float = 1e-8,
+        solver: LinearSolver = vanilla,
+    ):
         self.kernel = kernel
         self.noise = noise
+        self.solver = solver
 
     @abstractmethod
     def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]): ...
@@ -25,9 +30,14 @@ class Model(ABC):
     ) -> Float[np.ndarray, "T"]: ...
 
     @abstractmethod
-    def uncertainty(
+    def latent_uncertainty(
         self, T: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "T"]: ...
+
+    def predictive_uncertainty(
+        self, T: Float[np.ndarray, "T D"]
+    ) -> Float[np.ndarray, "T"]:
+        return (self.latent_uncertainty(T) ** 2 + self.noise) ** 0.5
 
     @property
     @abstractmethod
@@ -53,17 +63,11 @@ class Model(ABC):
         Z = rng.randn(N, n_samples)
         return (L @ Z).T
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(kernel={self.kernel}, noise={self.noise:.2e})"
+
 
 class GPR(Model):
-    def __init__(
-        self,
-        kernel: Kernel,
-        noise: float = 1e-8,
-        solver: LinearSolver = vanilla,
-    ):
-        super().__init__(kernel, noise)
-        self.solver = solver
-
     @ensure_2d("X")
     def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]):
         self.X = X
@@ -77,7 +81,7 @@ class GPR(Model):
         return np.einsum("ab,a->b", K_XT, self.c)  # (B)
 
     @ensure_2d("T")
-    def uncertainty(
+    def latent_uncertainty(
         self, T: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "T"]:
         K_XT = self.kernel(self.X, T)  # (A, B)
@@ -85,7 +89,7 @@ class GPR(Model):
         v = self.solver(self.K_XX, K_XT)  # (A, B)
         var = K_TT_diag - np.einsum("ab,ab->b", K_XT, v)
         var = np.maximum(var, 0.0)  # Numerical stability
-        return var
+        return var**0.5
 
     @property
     def log_likelihood(self) -> float:
@@ -107,43 +111,40 @@ class GPR(Model):
     def with_new(self, kernel: Kernel, noise: float) -> "GPR":
         return GPR(kernel, noise, self.solver)
 
-    def __repr__(self):
-        return f"GPR(kernel={self.kernel}, noise={self.noise})"
 
-
-class SoR(Model):
+class SparseModel(Model):
     def __init__(
         self,
         kernel: Kernel,
+        sparse_points: Float[np.ndarray, "M D"],
         noise: float = 1e-8,
-        n_sparse: int = 10,
-        strategy: Selector | None = None,
         solver: LinearSolver = vanilla,
     ):
-        self.kernel = kernel
-        self.noise = noise
-        self.n_sparse = n_sparse
-        self.strategy = strategy or RandomSelector(seed=42)
-        self.solver = solver
+        super().__init__(kernel, noise, solver)
+        self.M = sparse_points
 
+    def with_new(self, kernel: Kernel, noise: float) -> "SparseModel":
+        return self.__class__(
+            kernel,
+            sparse_points=self.M,
+            noise=noise,
+            solver=self.solver,
+        )
+
+
+class SoR(SparseModel):
     @ensure_2d("X")
     def fit(self, X: Float[np.ndarray, "A D"], y: Float[np.ndarray, "A"]):
-        # choose m sparse points
-        M = self.strategy(X, self.n_sparse)
-
         # compute kernel matrices
-        K_MX = self.kernel(M, X)
-        K_MM = self.kernel(M, M)
+        K_MX = self.kernel(self.M, X)
+        K_MM = self.kernel(self.M, self.M)
 
         # store necessary components for prediction
-        self.M = M
         self.y = y
-
-        # cache
         self.K_MX = K_MX
         self.inv_matrix = self.solver(
             K_MX @ K_MX.T + self.noise * K_MM,
-            np.eye(len(M)),
+            np.eye(len(self.M)),
         )
         self.K_MM = K_MM
 
@@ -155,7 +156,7 @@ class SoR(Model):
         return K_TM @ temp  # (T,)
 
     @ensure_2d("T")
-    def uncertainty(
+    def latent_uncertainty(
         self, T: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "T"]:
         # Compute required kernel matrices
@@ -172,7 +173,7 @@ class SoR(Model):
 
         # Ensure numerical stability
         var = np.maximum(var, 0.0)
-        return var
+        return var**0.5
 
     @property
     def log_likelihood(self) -> float:
@@ -218,105 +219,3 @@ class SoR(Model):
         logdet_Sigma = (n - m) * np.log(sigma2) - logdet_K + logdet_B
 
         return -0.5 * (quad + logdet_Sigma + n * np.log(2 * np.pi))
-
-    def with_new(self, kernel: Kernel, noise: float) -> "SoR":
-        return SoR(
-            kernel,
-            noise,
-            n_sparse=self.n_sparse,
-            strategy=self.strategy,
-            solver=self.solver,
-        )
-
-
-# class FITC(UncertaintyModel):
-#     def __init__(
-#         self,
-#         kernel: Kernel,
-#         noise: float = 1e-8,
-#         n_sparse: int = 10,
-#         strategy: Selector | None = None,
-#         solver: LinearSolver = vanilla,
-#     ):
-#         self.kernel = kernel
-#         self.noise = noise
-#         self.n_sparse = n_sparse
-#         self.strategy = strategy or RandomSelector(seed=42)
-#         self.solver = solver
-
-#     @ensure_2d("X")
-#     def fit(self, X: Float[np.ndarray, "A D"], y: Float[np.ndarray, "A"]):
-#         # choose m sparse points
-#         M = self.strategy(X, self.n_sparse)
-
-#         # compute kernel matrices
-#         K_MX = self.kernel(M, X)  # K_mn: M x N
-#         K_MM = self.kernel(M, M)  # K_mm: M x M
-#         K_XX_diag = np.diag(self.kernel(X, X))  # diagonal of K_nn: N
-
-#         # compute Lambda matrix (diagonal)
-#         # Lambda = diag[K_nn - K_nm K_mm^(-1) K_mn]
-#         K_MM_inv_K_MX = self.solver(K_MM, K_MX)  # K_mm^(-1) K_mn
-#         Lambda_diag = K_XX_diag - np.einsum(
-#             "mn,mn->n", K_MX, K_MM_inv_K_MX
-#         )
-
-#         # ensure numerical stability
-#         Lambda_diag = np.maximum(Lambda_diag, 1e-12)
-
-#         # compute (Lambda + sigma_epsilon^2 I)^(-1)
-#         Lambda_noise_inv_diag = 1.0 / (Lambda_diag + self.noise)
-
-#         # compute the main inverted matrix for predictions
-#         # (K_mm + K_mn(Lambda + sigma_epsilon^2 I)^(-1) K_nm)^(-1)
-#         temp_matrix = (
-#             K_MX * Lambda_noise_inv_diag[None, :] @ K_MX.T
-#         )  # K_mn (Lambda + noise I)^(-1) K_nm
-#         self.A_inv = self.solver(K_MM + temp_matrix, np.eye(len(M)))
-
-#         # store necessary components for prediction
-#         self.M = M
-#         self.y = y
-#         self.K_MX = K_MX
-#         self.K_MM = K_MM
-#         self.Lambda_noise_inv_diag = Lambda_noise_inv_diag
-#         self.K_MM_inv = self.solver(K_MM, np.eye(len(M)))
-
-#     @ensure_2d("T")
-#     def predict(
-#         self, T: Float[np.ndarray, "T D"]
-#     ) -> Float[np.ndarray, "T"]:
-#         # FITC predictive mean:
-#         # f̄_*,FITC = K_tm (K_mm + K_mn(Λ + σ_ε² I)^(-1) K_nm)^(-1) K_mn (Λ + σ_ε² I)^(-1) y
-
-#         K_TM = self.kernel(T, self.M)  # K_tm: T x M
-
-#         # K_mn (Lambda + sigma_epsilon^2 I)^(-1) y
-#         temp_y = self.K_MX @ (self.Lambda_noise_inv_diag * self.y)  # M
-
-#         # final prediction
-#         return K_TM @ (self.A_inv @ temp_y)  # T
-
-#     @ensure_2d("T")
-#     def uncertainty(
-#         self, T: Float[np.ndarray, "T D"]
-#     ) -> Float[np.ndarray, "T"]:
-#         # FITC predictive covariance:
-#         # cov(f_*,FITC) = K(T, T) - K_tm K_mm^(-1) K_mt + K_tm (K_mm + K_mn(Λ + σ_ε² I)^(-1) K_nm)^(-1) K_mt
-
-#         K_TM = self.kernel(T, self.M)  # K_tm: T x M
-#         K_TT_diag = np.diag(self.kernel(T, T))  # diagonal of K(T,T): T
-
-#         var = K_TT_diag.copy()
-
-#         # subtract K_tm K_mm^(-1) K_mt
-#         temp1 = K_TM @ self.K_MM_inv @ K_TM.T  # T x T
-#         var -= np.diag(temp1)
-
-#         # add K_tm (K_mm + K_mn(Λ + σ_ε² I)^(-1) K_nm)^(-1) K_mt
-#         temp2 = K_TM @ self.A_inv @ K_TM.T  # T x T
-#         var += np.diag(temp2)
-
-#         # ensure numerical stability
-#         var = np.maximum(var, 0.0)
-#         return var
