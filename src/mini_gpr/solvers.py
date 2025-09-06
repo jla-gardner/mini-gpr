@@ -5,7 +5,7 @@ from typing import Protocol
 import numpy as np
 from jaxtyping import Float
 
-from .utils import ensure_2d
+from mini_gpr.utils import ensure_2d
 
 
 class LinearSolver(Protocol):
