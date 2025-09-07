@@ -38,6 +38,7 @@ def test_kernel(k):
     K = k(A, B)
     assert K.shape == (10, 5)
     assert np.all(np.isfinite(K))
+    assert_allclose(k(A, B), k(B, A).T)
 
     params = k.params
     assert isinstance(params, dict)

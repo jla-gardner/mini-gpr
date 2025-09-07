@@ -3,6 +3,8 @@
 from functools import wraps
 from inspect import signature
 
+import numpy as np
+
 
 def ensure_2d(*var_names):
     """
@@ -26,3 +28,11 @@ def ensure_2d(*var_names):
         return wrapper
 
     return decorator
+
+
+def get_rng(rng: np.random.RandomState | int | None = None):
+    if rng is None:
+        rng = np.random.RandomState()
+    if isinstance(rng, int):
+        rng = np.random.RandomState(rng)
+    return rng

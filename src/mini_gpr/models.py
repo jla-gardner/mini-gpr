@@ -7,7 +7,7 @@ from jaxtyping import Float
 
 from mini_gpr.kernels import Kernel
 from mini_gpr.solvers import LinearSolver, vanilla
-from mini_gpr.utils import ensure_2d
+from mini_gpr.utils import ensure_2d, get_rng
 
 
 class Model(ABC):
@@ -56,10 +56,7 @@ class Model(ABC):
         jitter: float = 1e-8,
     ) -> Float[np.ndarray, "n N"]:
         N = locations.shape[0]
-        if rng is None:
-            rng = np.random.RandomState()
-        if isinstance(rng, int):
-            rng = np.random.RandomState(rng)
+        rng = get_rng(rng)
         K = self.kernel(locations, locations) + np.eye(N) * jitter
         L = np.linalg.cholesky(K)
         Z = rng.randn(N, n_samples)
@@ -72,6 +69,7 @@ class Model(ABC):
         n_samples: int = 1,
         *,
         rng: np.random.RandomState | int | None = None,
+        jitter: float = 1e-6,
     ) -> Float[np.ndarray, "n N"]: ...
 
     def __repr__(self):
@@ -130,11 +128,9 @@ class GPR(Model):
         n_samples: int = 1,
         *,
         rng: np.random.RandomState | int | None = None,
+        jitter: float = 1e-6,
     ) -> Float[np.ndarray, "n N"]:
-        if rng is None:
-            rng = np.random.RandomState()
-        if isinstance(rng, int):
-            rng = np.random.RandomState(rng)
+        rng = get_rng(rng)
 
         N = locations.shape[0]
 
@@ -147,7 +143,6 @@ class GPR(Model):
 
         # Force symmetry & numerical stability
         cov = 0.5 * (cov + cov.T)
-        jitter = self.noise**2 * 1e-6
         L = np.linalg.cholesky(cov + np.eye(N) * jitter)
 
         Z = rng.randn(N, n_samples)
@@ -270,11 +265,9 @@ class SoR(SparseModel):
         n_samples: int = 1,
         *,
         rng: np.random.RandomState | int | None = None,
+        jitter: float = 1e-6,
     ) -> Float[np.ndarray, "N n"]:
-        if rng is None:
-            rng = np.random.RandomState()
-        if isinstance(rng, int):
-            rng = np.random.RandomState(rng)
+        rng = get_rng(rng)
 
         # Posterior mean
         mu = self.predict(locations)  # (N,)
@@ -295,7 +288,6 @@ class SoR(SparseModel):
         cov = 0.5 * (cov + cov.T)
 
         # --- Cholesky with jitter ---
-        jitter = 1e-12
         L = np.linalg.cholesky(cov + np.eye(cov.shape[0]) * jitter)
 
         # --- Draw samples ---

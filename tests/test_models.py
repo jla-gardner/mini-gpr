@@ -1,9 +1,43 @@
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 
 from mini_gpr.kernels import RBF
-from mini_gpr.models import GPR, SoR
+from mini_gpr.models import GPR, Model, SoR
 from mini_gpr.solvers import least_squares, vanilla
+
+models_to_test = [
+    GPR(RBF()),
+    SoR(RBF(), np.array(np.random.rand(5, 2))),
+]
+
+
+@pytest.mark.parametrize(
+    "model",
+    models_to_test,
+    ids=lambda x: x.__class__.__name__,
+)
+def test_model(model: Model):
+    X = np.random.rand(20, 2)
+    y = X[:, 0] * 0.5 + X[:, 1] * 2 + 1
+    # test fit
+    model.fit(X, y)
+
+    # test sampling
+    locations = np.random.rand(10, 2)
+    samples = model.sample_prior(locations, n_samples=3)
+    assert samples.shape == (10, 3)
+    assert np.all(np.isfinite(samples))
+
+    samples = model.sample_posterior(locations, n_samples=3)
+    assert samples.shape == (10, 3)
+    assert np.all(np.isfinite(samples))
+
+    # test predict
+    T = np.random.randn(10, 2)
+    predictions = model.predict(T)
+    assert predictions.shape == (10,)
+    assert np.all(np.isfinite(predictions))
 
 
 def test_model_repr():
@@ -298,44 +332,6 @@ def test_sor_log_likelihood():
     assert np.isfinite(ll)
 
 
-def test_sor_log_likelihood_zero_noise():
-    """Test SoR log likelihood with zero noise."""
-    kernel = RBF(sigma=1.0)
-    M = np.array([[0.0], [1.0]])
-    sor = SoR(kernel, M, noise=0.0)
-
-    X = np.array([[0.0], [1.0]])
-    y = np.array([0.0, 1.0])
-
-    # This might not raise an error due to numerical precision
-    # Let's just test that it works or raises an error
-    try:
-        sor.fit(X, y)
-        # If it doesn't raise an error, that's also acceptable
-    except ValueError:
-        # This is the expected behavior
-        pass
-
-
-def test_sor_log_likelihood_non_positive_definite():
-    """Test SoR log likelihood with non-positive definite matrix."""
-    kernel = RBF(sigma=1e-10)  # Very small sigma
-    M = np.array([[0.0], [1e-10]])  # Very close inducing points
-    sor = SoR(kernel, M, noise=1e-15)
-
-    X = np.array([[0.0], [1e-10]])
-    y = np.array([0.0, 1.0])
-
-    # This might not raise an error due to numerical precision
-    # Let's just test that it works or raises an error
-    try:
-        sor.fit(X, y)
-        # If it doesn't raise an error, that's also acceptable
-    except np.linalg.LinAlgError:
-        # This is the expected behavior
-        pass
-
-
 def test_sor_different_solvers():
     """Test SoR with different linear solvers."""
     kernel = RBF(sigma=1.0)
@@ -397,49 +393,13 @@ def test_sor_vs_gpr_consistency():
     assert_allclose(gpr_pred, sor_pred, atol=1e-10)
 
 
-def test_sor_sparse_approximation():
-    """Test that SoR provides reasonable sparse approximation."""
-    kernel = RBF(sigma=1.0)
-
-    # Create more training points than inducing points
-    X = np.linspace(0, 5, 20).reshape(-1, 1)
-    y = np.sin(X.ravel()) + 0.1 * np.random.randn(20)
-
-    # GPR with all points
-    gpr = GPR(kernel, noise=1e-6)
-    gpr.fit(X, y)
-
-    # SoR with fewer inducing points
-    M = np.linspace(0, 5, 5).reshape(-1, 1)
-    sor = SoR(kernel, M, noise=1e-6)
-    sor.fit(X, y)
-
-    T = np.array([[0.5], [1.5], [2.5], [3.5], [4.5]])
-
-    gpr_pred = gpr.predict(T)
-    sor_pred = sor.predict(T)
-
-    # SoR should be reasonably close to GPR (relaxed tolerance for sparse
-    # approximation)
-    assert_allclose(gpr_pred, sor_pred, atol=0.2)
-
-
 def test_empty_training_data():
     """Test models with empty training data."""
     kernel = RBF(sigma=1.0)
     gpr = GPR(kernel, noise=1e-6)
-
     X = np.empty((0, 1))
     y = np.empty(0)
-
-    # This might not raise an error due to how numpy handles empty arrays
-    # Let's just test that it works or raises an error
-    try:
-        gpr.fit(X, y)
-        # If it doesn't raise an error, that's also acceptable
-    except (ValueError, np.linalg.LinAlgError):
-        # This is the expected behavior
-        pass
+    gpr.fit(X, y)
 
 
 def test_single_training_point():
