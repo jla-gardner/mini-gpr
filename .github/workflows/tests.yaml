@@ -1,0 +1,50 @@
+name: tests
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./src"
+          version-file: "uv.lock"
+
+  tests:
+    runs-on: ubuntu-latest
+    name: tests
+    steps:
+      ### SETUP ###
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: install dependencies
+        run: uv sync --all-extras
+
+      ### CODE TESTS ###
+      - name: pytest
+        run: uv run pytest --cov --cov-branch --cov-report=xml tests/
+
+      - name: upload
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+

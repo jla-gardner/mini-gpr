@@ -112,6 +112,10 @@ class PowerKernel(Kernel):
         kernel = self.kernel.with_new(params)
         return PowerKernel(power=self.power, kernel=kernel)
 
+    def __repr__(self):
+        name = self.__class__.__name__
+        return f"{name}(power={self.power:.2e}, kernel={repr(self.kernel)})"
+
 
 class RBF(Kernel):
     def __init__(
@@ -137,6 +141,7 @@ class DotProduct(Kernel):
     def __init__(self, scale: float = 1.0):
         super().__init__(params={"scale": scale})
 
+    @ensure_2d("A", "B")
     def __call__(self, A, B):
         scale = self.params["scale"]
         assert isinstance(scale, float | int)
@@ -154,9 +159,10 @@ class Constant(Kernel):
 
 
 class Linear(Kernel):
-    def __init__(self, m: float | list[float], scale: float = 1.0):
+    def __init__(self, m: float | list[float] = 0, scale: float = 1.0):
         super().__init__(params={"m": m, "scale": scale})
 
+    @ensure_2d("A", "B")
     def __call__(self, A, B):
         m, scale = self.params["m"], self.params["scale"]
         assert isinstance(scale, float | int)
