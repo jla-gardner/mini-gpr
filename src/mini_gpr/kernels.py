@@ -8,7 +8,6 @@ from jaxtyping import Float
 
 from mini_gpr.utils import ensure_2d
 
-
 # TODO: diag method
 
 

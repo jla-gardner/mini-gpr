@@ -364,13 +364,12 @@ def test_sum_kernel_nested():
     rbf2 = RBF(sigma=2.0)
     const = Constant(value=1.0)
 
-    sum1 = SumKernel(rbf1, rbf2)
-    sum2 = SumKernel(sum1, const)
+    sum_kernel = rbf1 + rbf2 + const
 
     X = np.array([[0.0], [1.0]])
     Y = np.array([[0.0], [1.0]])
 
-    K = sum2(X, Y)
+    K = sum_kernel(X, Y)
     K_expected = rbf1(X, Y) + rbf2(X, Y) + const(X, Y)
 
     assert_allclose(K, K_expected)
@@ -428,13 +427,12 @@ def test_product_kernel_nested():
     rbf2 = RBF(sigma=2.0)
     const = Constant(value=1.0)
 
-    prod1 = ProductKernel(rbf1, rbf2)
-    prod2 = ProductKernel(prod1, const)
+    prod_kernel = rbf1 * rbf2 * const
 
     X = np.array([[0.0], [1.0]])
     Y = np.array([[0.0], [1.0]])
 
-    K = prod2(X, Y)
+    K = prod_kernel(X, Y)
     K_expected = rbf1(X, Y) * rbf2(X, Y) * const(X, Y)
 
     assert_allclose(K, K_expected)
