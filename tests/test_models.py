@@ -28,7 +28,7 @@ def test_predictive_uncertainty():
     latent_unc = gpr.latent_uncertainty(T)
     pred_unc = gpr.predictive_uncertainty(T)
 
-    expected = np.sqrt(latent_unc**2 + gpr.noise)
+    expected = np.sqrt(latent_unc**2 + gpr.noise**2)
     assert_allclose(pred_unc, expected)
 
 
