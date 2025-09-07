@@ -35,3 +35,13 @@ extend-include = ["*.ipynb", "*.pyi", "*.toml"]
 select = ["E", "F", "UP", "B", "SIM", "I"]
 ignore = ["SIM300", "E402", "E703", "F722", "UP037", "F821", "B018", "E741"]
 fixable = ["ALL"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+omit = [
+    "tests/*",
+    "test/*",
+]

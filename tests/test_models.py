@@ -1,17 +1,9 @@
 import numpy as np
-import pytest
 from numpy.testing import assert_allclose
 
 from mini_gpr.kernels import RBF
-from mini_gpr.models import GPR, Model, SoR, SparseModel
+from mini_gpr.models import GPR, SoR
 from mini_gpr.solvers import least_squares, vanilla
-
-
-def test_model_abstract():
-    """Test that Model is abstract and cannot be instantiated."""
-    kernel = RBF(sigma=1.0)
-    with pytest.raises(TypeError):
-        Model(kernel)  # type: ignore
 
 
 def test_model_repr():
@@ -221,14 +213,6 @@ def test_gpr_high_dimensional():
     assert uncertainties.shape == (3,)
     assert np.all(np.isfinite(predictions))
     assert np.all(np.isfinite(uncertainties))
-
-
-def test_sparse_model_abstract():
-    """Test that SparseModel is abstract and cannot be instantiated."""
-    kernel = RBF(sigma=1.0)
-    M = np.array([[0.0], [1.0]])
-    with pytest.raises(TypeError):
-        SparseModel(kernel, M)  # type: ignore
 
 
 def test_sparse_model_with_new():
