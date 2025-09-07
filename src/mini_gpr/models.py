@@ -18,7 +18,7 @@ class Model(ABC):
         solver: LinearSolver = vanilla,
     ):
         self.kernel = kernel
-        self.noise = noise
+        self.noise = abs(noise)
         self.solver = solver
 
     @abstractmethod
@@ -37,7 +37,7 @@ class Model(ABC):
     def predictive_uncertainty(
         self, T: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "T"]:
-        return (self.latent_uncertainty(T) ** 2 + self.noise) ** 0.5
+        return (self.latent_uncertainty(T) ** 2 + self.noise**2) ** 0.5
 
     @property
     @abstractmethod
@@ -52,26 +52,38 @@ class Model(ABC):
         locations: Float[np.ndarray, "N D"],
         n_samples: int = 1,
         *,
-        rng: np.random.RandomState | None = None,
+        rng: np.random.RandomState | int | None = None,
         jitter: float = 1e-8,
-    ) -> Float[np.ndarray, "N n"]:
+    ) -> Float[np.ndarray, "n N"]:
         N = locations.shape[0]
         if rng is None:
             rng = np.random.RandomState()
+        if isinstance(rng, int):
+            rng = np.random.RandomState(rng)
         K = self.kernel(locations, locations) + np.eye(N) * jitter
         L = np.linalg.cholesky(K)
         Z = rng.randn(N, n_samples)
-        return (L @ Z).T
+        return L @ Z
+
+    @abstractmethod
+    def sample_posterior(
+        self,
+        locations: Float[np.ndarray, "N D"],
+        n_samples: int = 1,
+        *,
+        rng: np.random.RandomState | int | None = None,
+    ) -> Float[np.ndarray, "n N"]: ...
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(kernel={self.kernel}, noise={self.noise:.2e})"
+        name = self.__class__.__name__
+        return f"{name}(kernel={self.kernel}, noise={self.noise:.2e})"
 
 
 class GPR(Model):
     @ensure_2d("X")
     def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]):
         self.X = X
-        self.K_XX = self.kernel(X, X) + self.noise * np.eye(len(X))
+        self.K_XX = self.kernel(X, X) + self.noise**2 * np.eye(len(X))
         self.c = self.solver(self.K_XX, y)
         self.y = y
 
@@ -111,6 +123,36 @@ class GPR(Model):
     def with_new(self, kernel: Kernel, noise: float) -> "GPR":
         return GPR(kernel, noise, self.solver)
 
+    @ensure_2d("locations")
+    def sample_posterior(
+        self,
+        locations: Float[np.ndarray, "N D"],
+        n_samples: int = 1,
+        *,
+        rng: np.random.RandomState | int | None = None,
+    ) -> Float[np.ndarray, "n N"]:
+        if rng is None:
+            rng = np.random.RandomState()
+        if isinstance(rng, int):
+            rng = np.random.RandomState(rng)
+
+        N = locations.shape[0]
+
+        mu = self.predict(locations)
+
+        K_XT = self.kernel(self.X, locations)
+        v = self.solver(self.K_XX, K_XT)
+        K_TT = self.kernel(locations, locations)
+        cov = K_TT - K_XT.T @ v
+
+        # Force symmetry & numerical stability
+        cov = 0.5 * (cov + cov.T)
+        jitter = self.noise**2 * 1e-6
+        L = np.linalg.cholesky(cov + np.eye(N) * jitter)
+
+        Z = rng.randn(N, n_samples)
+        return (L @ Z) + mu[:, None]
+
 
 class SparseModel(Model):
     def __init__(
@@ -143,7 +185,7 @@ class SoR(SparseModel):
         self.y = y
         self.K_MX = K_MX
         self.inv_matrix = self.solver(
-            K_MX @ K_MX.T + self.noise * K_MM,
+            K_MX @ K_MX.T + self.noise**2 * K_MM,
             np.eye(len(self.M)),
         )
         self.K_MM = K_MM
@@ -169,7 +211,7 @@ class SoR(SparseModel):
         var -= np.einsum("tm,mt->t", K_TM, K_MM_inv_K_MT)
 
         temp = K_TM @ self.inv_matrix @ K_TM.T
-        var += self.noise * np.diag(temp)
+        var += self.noise**2 * np.diag(temp)
 
         # Ensure numerical stability
         var = np.maximum(var, 0.0)
@@ -189,7 +231,7 @@ class SoR(SparseModel):
         """
         n = len(self.y)
         m = len(self.M)
-        sigma2 = float(self.noise)
+        sigma2 = float(self.noise**2)
 
         if sigma2 <= 0.0:
             raise ValueError(
@@ -213,9 +255,50 @@ class SoR(SparseModel):
 
         if sign_B <= 0 or sign_K <= 0:
             raise np.linalg.LinAlgError(
-                "Encountered non–PD matrix in SoR likelihood (check kernel/noise)."
+                "Kernel matrix is not positive definite. "
+                "Try gradually increasing the noise."
             )
 
         logdet_Sigma = (n - m) * np.log(sigma2) - logdet_K + logdet_B
 
         return -0.5 * (quad + logdet_Sigma + n * np.log(2 * np.pi))
+
+    @ensure_2d("locations")
+    def sample_posterior(
+        self,
+        locations: Float[np.ndarray, "N D"],
+        n_samples: int = 1,
+        *,
+        rng: np.random.RandomState | int | None = None,
+    ) -> Float[np.ndarray, "N n"]:
+        if rng is None:
+            rng = np.random.RandomState()
+        if isinstance(rng, int):
+            rng = np.random.RandomState(rng)
+
+        # Posterior mean
+        mu = self.predict(locations)  # (N,)
+
+        # --- Compute posterior covariance ---
+        K_TM = self.kernel(locations, self.M)  # (N, M)
+        K_TT = self.kernel(locations, locations)  # (N, N)
+
+        # First subtract Nyström term: K_TM K_MM^{-1} K_MT
+        K_MM_inv_K_MT = self.solver(self.K_MM, K_TM.T)  # (M, N)
+        cov = K_TT - K_TM @ K_MM_inv_K_MT  # (N, N)
+
+        # Add correction term from the noise-adjusted projection
+        # temp = K_TM @ inv_matrix @ K_TM.T
+        cov += self.noise**2 * (K_TM @ self.inv_matrix @ K_TM.T)
+
+        # Symmetrize for stability
+        cov = 0.5 * (cov + cov.T)
+
+        # --- Cholesky with jitter ---
+        jitter = 1e-12
+        L = np.linalg.cholesky(cov + np.eye(cov.shape[0]) * jitter)
+
+        # --- Draw samples ---
+        N = cov.shape[0]
+        Z = rng.randn(N, n_samples)  # (N, n_samples)
+        return (L @ Z) + mu[:, None]

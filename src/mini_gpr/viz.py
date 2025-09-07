@@ -22,6 +22,7 @@ def show_model_predictions(
     X: Float[np.ndarray, "N D"],
     y: Float[np.ndarray, "N"],
     *,
+    test_points: Float[np.ndarray, "T D"] | None = None,
     n_sigma: int = 3,
     keep_axes: bool = False,
     legend_loc: Literal["right", "top"] = "right",
@@ -30,9 +31,12 @@ def show_model_predictions(
 ):
     plt.figure(figsize=(4, 3))
 
-    lo, hi = np.min(X), np.max(X)
-    w = hi - lo
-    xx = np.linspace(lo - w * 0.15, hi + w * 0.15, 200)
+    if test_points is None:
+        lo, hi = np.min(X), np.max(X)
+        w = hi - lo
+        xx = np.linspace(lo - w * 0.15, hi + w * 0.15, 200)
+    else:
+        xx = test_points
     yy_mean = model.predict(xx)
     yy_std = (
         model.latent_uncertainty(xx)
@@ -101,7 +105,7 @@ def sample_kernel(
     plt.figure(figsize=(3, 3))
     _model = GPR(kernel=kernel, noise=0.0)
     y = _model.sample_prior(x, n_samples, rng=np.random.RandomState(seed))
-    plt.plot(x, y.T)
+    plt.plot(x, y)
     for side in "top", "right":
         plt.gca().spines[side].set_visible(False)
     for side in "left", "bottom":

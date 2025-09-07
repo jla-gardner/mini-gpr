@@ -19,6 +19,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "make-a-gif>=0.2.0",
     "notebook>=7.4.3",
     "pytest>=8.0.0",
     "pytest-cov>=6.3.0",
@@ -38,10 +39,7 @@ fixable = ["ALL"]
 
 [tool.coverage.run]
 branch = true
-source = ["src"]
+source = ["src/mini_gpr"]
 
 [tool.coverage.report]
-omit = [
-    "tests/*",
-    "test/*",
-]
+omit = ["tests/*", "test/*", "*/viz.py"]
