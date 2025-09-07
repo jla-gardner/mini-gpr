@@ -250,7 +250,7 @@ def test_gpr_high_dimensional():
 
 
 def test_sparse_model_with_new():
-    """Test SparseModel with_new method."""
+    """Test SoR with_new method."""
     kernel1 = RBF(sigma=1.0)
     M = np.array([[0.0], [1.0]])
     sor = SoR(kernel1, M, noise=1e-6)

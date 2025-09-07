@@ -7,10 +7,16 @@ from mini_gpr.models import Model
 
 
 class Objective(Protocol):
+    """
+    An objective function takes a model as input, and returns a scalar value,
+    such that a lower value is a "better" model.
+    """
+
     def __call__(self, model: Model) -> float: ...
 
 
 def maximise_log_likelihood(model: Model):
+    """Maximise the log likelihood of the model."""
     return -model.log_likelihood
 
 
@@ -18,6 +24,8 @@ def validation_set_mse(
     X: Float[np.ndarray, "N D"],
     y: Float[np.ndarray, "N"],
 ) -> Objective:
+    """Minimise the mean squared error of the model on the validation set."""
+
     def func(model: Model):
         yy = model.predict(X)
         return np.mean((y - yy) ** 2).item()
@@ -29,6 +37,8 @@ def validation_set_log_likelihood(
     X: Float[np.ndarray, "N D"],
     y: Float[np.ndarray, "N"],
 ) -> Objective:
+    """Minimise the log likelihood of the model on the validation set."""
+
     def func(model: Model):
         yy = model.predict(X)
         std = model.predictive_uncertainty(X)
@@ -81,6 +91,26 @@ def optimise_model(
     optimise_noise: bool = False,
     max_iterations: int = 100,
 ):
+    """
+    Optimise the model (kernel hyperparameters and noise)
+    to minimise the objective function.
+
+    Parameters
+    ----------
+    m
+        the model to optimise.
+    objective
+        the objective function to minimise.
+    X
+        the training data.
+    y
+        the training targets.
+    optimise_noise
+        whether to optimise the noise.
+    max_iterations
+        the maximum number of iterations.
+    """
+
     try:
         from scipy.optimize import minimize
     except ImportError:

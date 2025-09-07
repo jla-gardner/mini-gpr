@@ -301,7 +301,7 @@ def test_linear_1d_input():
 
 def test_periodic_basic():
     """Test basic periodic kernel functionality."""
-    periodic = Periodic(sigma=1.0, period=1.0, lengthscale=1.0)
+    periodic = Periodic(sigma=1.0, period=1.0, scale=1.0)
     X = np.array([[0.0], [0.5], [1.0]])
     Y = np.array([[0.0], [0.5], [1.0]])
 
@@ -312,7 +312,7 @@ def test_periodic_basic():
 
 def test_periodic_periodicity():
     """Test periodic kernel respects periodicity."""
-    periodic = Periodic(sigma=1.0, period=1.0, lengthscale=1.0)
+    periodic = Periodic(sigma=1.0, period=1.0, scale=1.0)
     X = np.array([[0.0], [1.0]])
     Y = np.array([[0.0], [1.0]])
 
@@ -324,7 +324,7 @@ def test_periodic_periodicity():
 
 def test_periodic_1d_input():
     """Test periodic kernel with 1D input."""
-    periodic = Periodic(sigma=1.0, period=1.0, lengthscale=1.0)
+    periodic = Periodic(sigma=1.0, period=1.0, scale=1.0)
     X = np.array([0.0, 1.0])
     Y = np.array([0.0, 1.0])
 
@@ -334,7 +334,7 @@ def test_periodic_1d_input():
 
 def test_periodic_different_periods():
     """Test periodic kernel with different periods for different dimensions."""
-    periodic = Periodic(sigma=1.0, period=[1.0, 2.0], lengthscale=1.0)
+    periodic = Periodic(sigma=1.0, period=[1.0, 2.0], scale=1.0)
     X = np.array([[0.0, 0.0], [1.0, 2.0]])
     Y = np.array([[0.0, 0.0], [1.0, 2.0]])
 

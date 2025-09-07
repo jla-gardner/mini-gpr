@@ -22,9 +22,12 @@ class LinearSolver(Protocol):
 
 @ensure_2d("A")
 def vanilla(A, y):
+    """Use the standard `np.linalg.solve` method to solve the linear system."""
     return np.linalg.solve(A, y)
 
 
 @ensure_2d("A")
 def least_squares(A, y):
+    """Use `np.linalg.lstsq` method to solve the linear system:
+    slower than ``vanilla`` but more stable."""
     return np.linalg.lstsq(A, y, rcond=None)[0]

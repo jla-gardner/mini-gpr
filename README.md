@@ -2,7 +2,7 @@
 
 # `mini-gpr`
 
-<img src="docs/1d-gpr.gif" alt="1D GPR" width="400">
+<img src="docs/_static/1d-gpr.gif" alt="1D GPR" width="400">
 
 </div>
 

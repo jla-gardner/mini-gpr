@@ -5,7 +5,7 @@ import numpy as np
 from jaxtyping import Float
 
 from mini_gpr.kernels import Kernel
-from mini_gpr.models import GPR, Model, SparseModel
+from mini_gpr.models import GPR, Model, SoR
 
 try:
     from IPython.core.getipython import get_ipython
@@ -58,7 +58,7 @@ def show_model_predictions(
     plt.plot(
         X, y, "ok", label="Data", zorder=10, lw=0, ms=marker_size, alpha=0.5
     )
-    if isinstance(model, SparseModel):
+    if isinstance(model, SoR):
         plt.plot(
             model.M,
             [0.0] * len(model.M),

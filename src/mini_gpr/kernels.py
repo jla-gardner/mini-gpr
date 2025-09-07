@@ -12,6 +12,15 @@ from mini_gpr.utils import ensure_2d
 
 
 class Kernel(ABC):
+    """
+    Base class for all kernels.
+
+    Parameters
+    ----------
+    params
+        the hyper-parameters of the kernel.
+    """
+
     def __init__(self, params: dict[str, float | list[float]]):
         self.params = params
 
@@ -20,7 +29,20 @@ class Kernel(ABC):
         self,
         A: Float[np.ndarray, "N D"],
         B: Float[np.ndarray, "T D"],
-    ) -> Float[np.ndarray, "A B"]: ...
+    ) -> Float[np.ndarray, "A B"]:
+        """
+        Compute the kernel matrix between two sets of points.
+
+        Note that all implementations should access the hyper-parameters via
+        the `params` attribute.
+
+        Parameters
+        ----------
+        A
+            the first set of points.
+        B
+            the second set of points.
+        """
 
     def with_new(self, params: dict[str, float | list[float]]) -> "Kernel":
         copy = deepcopy(self)
@@ -39,6 +61,16 @@ class Kernel(ABC):
         return f"{name}({', '.join(params)})"
 
     def __add__(self, other: "Kernel") -> "SumKernel":
+        """
+        Add two kernels together.
+
+        Example
+        -------
+        >>> k1 = RBF(sigma=1.0)
+        >>> k2 = Linear()
+        >>> k = k1 + k2
+        >>> assert k(A, B) == k1(A, B) + k2(A, B)
+        """
         kernels: list[Kernel] = []
         for thing in [self, other]:
             if isinstance(thing, SumKernel):
@@ -48,6 +80,16 @@ class Kernel(ABC):
         return SumKernel(*kernels)
 
     def __mul__(self, other: "Kernel") -> "ProductKernel":
+        """
+        Multiply two kernels together.
+
+        Example
+        -------
+        >>> k1 = RBF(sigma=1.0)
+        >>> k2 = Linear()
+        >>> k = k1 * k2
+        >>> assert k(A, B) == k1(A, B) * k2(A, B)
+        """
         kernels: list[Kernel] = []
         for thing in [self, other]:
             if isinstance(thing, ProductKernel):
@@ -57,6 +99,15 @@ class Kernel(ABC):
         return ProductKernel(*kernels)
 
     def __pow__(self, other: float) -> "PowerKernel":
+        """
+        Raise this kernel to some power.
+
+        Example
+        -------
+        >>> k = RBF(sigma=1.0)
+        >>> k2 = k**2.0
+        >>> assert k2(A, B) == k(A, B)**2.0
+        """
         return PowerKernel(power=other, kernel=self)
 
 
@@ -84,6 +135,8 @@ class MultiKernel(Kernel):
 
 
 class SumKernel(MultiKernel):
+    """Sum over multiple kernels."""
+
     @ensure_2d("A", "B")
     def __call__(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
         values = [kernel(A, B) for kernel in self.kernels]
@@ -91,6 +144,8 @@ class SumKernel(MultiKernel):
 
 
 class ProductKernel(MultiKernel):
+    """Product over multiple kernels."""
+
     @ensure_2d("A", "B")
     def __call__(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
         values = [kernel(A, B) for kernel in self.kernels]
@@ -98,6 +153,8 @@ class ProductKernel(MultiKernel):
 
 
 class PowerKernel(Kernel):
+    """Raise a kernel to some power."""
+
     def __init__(self, power: float, kernel: Kernel):
         super().__init__(kernel.params)
         self.kernel = kernel
@@ -117,6 +174,25 @@ class PowerKernel(Kernel):
 
 
 class RBF(Kernel):
+    r"""
+    Radial Basis Function kernel.
+
+    .. math::
+
+        k(x, x^\prime) = \exp\left(-\frac{1}{2\sigma^2} (x - x^\prime)^2\right) \cdot s^2
+
+    where:
+
+    - :math:`\sigma` is the ``sigma`` parameter.
+    - :math:`s` is the ``scale`` parameter.
+
+    Example
+    -------
+    >>> k = RBF(sigma=1.0, scale=1.0)
+    >>> K = k(A, B)
+    >>> assert K.shape == (A.shape[0], B.shape[0])
+    """
+
     def __init__(
         self,
         sigma: float | list[float] = 1.0,
@@ -137,6 +213,18 @@ class RBF(Kernel):
 
 
 class DotProduct(Kernel):
+    r"""
+    Dot product kernel.
+
+    .. math::
+
+        k(x, x^\prime) = x \cdot x^\prime \cdot s^2
+
+    where:
+
+    - :math:`s` is the ``scale`` parameter.
+    """
+
     def __init__(self, scale: float = 1.0):
         super().__init__(params={"scale": scale})
 
@@ -148,6 +236,18 @@ class DotProduct(Kernel):
 
 
 class Constant(Kernel):
+    r"""
+    Constant kernel.
+
+    .. math::
+
+        k(x, x^\prime) = s^2
+
+    where:
+
+    - :math:`s` is the ``value`` parameter.
+    """
+
     def __init__(self, value: float = 1.0):
         super().__init__(params={"value": value})
 
@@ -158,6 +258,19 @@ class Constant(Kernel):
 
 
 class Linear(Kernel):
+    r"""
+    Linear kernel.
+
+    .. math::
+
+        k(x, x^\prime) = (x - m) \cdot (x^\prime - m) \cdot s^2
+
+    where:
+
+    - :math:`m` is the ``m`` parameter.
+    - :math:`s` is the ``scale`` parameter.
+    """
+
     def __init__(self, m: float | list[float] = 0, scale: float = 1.0):
         super().__init__(params={"m": m, "scale": scale})
 
@@ -170,33 +283,43 @@ class Linear(Kernel):
 
 
 class Periodic(Kernel):
+    r"""
+    Periodic kernel.
+
+    .. math::
+
+        k(x, x^\prime) = \exp\left(-\frac{1}{2\sigma^2} (x - x^\prime)^2\right) \cdot s^2
+
+    where:
+
+    - :math:`s` is the ``scale`` parameter.
+    - :math:`p` is the ``period`` parameter.
+    - :math:`\sigma` is the ``sigma`` parameter.
+    """
+
     def __init__(
         self,
-        sigma: float = 1.0,
+        scale: float = 1.0,
         period: float | list[float] = 1.0,
-        lengthscale: float | list[float] = 1.0,
+        sigma: float | list[float] = 1.0,
     ):
         super().__init__(
-            params={
-                "sigma": sigma,
-                "period": period,
-                "lengthscale": lengthscale,
-            }
+            params={"sigma": sigma, "period": period, "scale": scale}
         )
 
     @ensure_2d("A", "B")
     def __call__(self, A, B):
         sigma = self.params["sigma"]
-        assert isinstance(sigma, float | int)
         period = self.params["period"]
-        lengthscale = self.params["lengthscale"]
+        scale = self.params["scale"]
+        assert isinstance(scale, float | int)
 
         # all shapes are (N, M, D)
         diff = A[:, None, :] - B[None, :, :]
         sin_terms = np.sin(np.pi * np.abs(diff) / period) ** 2
-        exp_terms = -2 * sin_terms / np.power(lengthscale, 2)
+        exp_terms = -2 * sin_terms / np.power(sigma, 2)
 
         # shape is (N, M)
         exp_term = np.sum(exp_terms, axis=2)
 
-        return (sigma**2) * np.exp(exp_term)
+        return (scale**2) * np.exp(exp_term)

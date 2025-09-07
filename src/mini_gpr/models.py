@@ -22,26 +22,62 @@ class Model(ABC):
         self.solver = solver
 
     @abstractmethod
-    def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]): ...
+    def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]):
+        """
+        Fit the model to the data.
+
+        Parameters
+        ----------
+        X
+            the data points.
+        y
+            the target values.
+        """
 
     @abstractmethod
-    def predict(
-        self, T: Float[np.ndarray, "T D"]
-    ) -> Float[np.ndarray, "T"]: ...
+    def predict(self, T: Float[np.ndarray, "T D"]) -> Float[np.ndarray, "T"]:
+        """
+        Get the predictive mean of the function at the given locations.
+
+        Parameters
+        ----------
+        T
+            the data points/locations at which to make predictions
+        """
 
     @abstractmethod
     def latent_uncertainty(
         self, T: Float[np.ndarray, "T D"]
-    ) -> Float[np.ndarray, "T"]: ...
+    ) -> Float[np.ndarray, "T"]:
+        """
+        Get the latent uncertainty of the function at the given locations.
+
+        Parameters
+        ----------
+        T
+            the data points/locations at which to get the latent uncertainty
+        """
 
     def predictive_uncertainty(
         self, T: Float[np.ndarray, "T D"]
     ) -> Float[np.ndarray, "T"]:
+        r"""
+        Get the predictive uncertainty of the function at the given locations.
+
+        Parameters
+        ----------
+        T
+            the data points/locations at which to get the predictive uncertainty
+        """
         return (self.latent_uncertainty(T) ** 2 + self.noise**2) ** 0.5
 
     @property
     @abstractmethod
-    def log_likelihood(self) -> float: ...
+    def log_likelihood(self) -> float:
+        """
+        Get the log marginal likelihood of the model conditioned on the
+        training data.
+        """
 
     @abstractmethod
     def with_new(self, kernel: Kernel, noise: float) -> "Model": ...
@@ -55,6 +91,21 @@ class Model(ABC):
         rng: np.random.RandomState | int | None = None,
         jitter: float = 1e-8,
     ) -> Float[np.ndarray, "n N"]:
+        """
+        Generate samples from the model's prior distribution.
+
+        Parameters
+        ----------
+        locations
+            the data points/locations at which to generate samples
+        n_samples
+            the number of samples to generate
+        rng
+            the random number generator to use
+        jitter
+            a small value to add to the diagonal of the kernel matrix to ensure
+            numerical stability
+        """
         N = locations.shape[0]
         rng = get_rng(rng)
         K = self.kernel(locations, locations) + np.eye(N) * jitter
@@ -70,7 +121,22 @@ class Model(ABC):
         *,
         rng: np.random.RandomState | int | None = None,
         jitter: float = 1e-6,
-    ) -> Float[np.ndarray, "n N"]: ...
+    ) -> Float[np.ndarray, "n N"]:
+        """
+        Generate samples from the model's posterior distribution.
+
+        Parameters
+        ----------
+        locations
+            the data points/locations at which to generate samples
+        n_samples
+            the number of samples to generate
+        rng
+            the random number generator to use
+        jitter
+            a small value to add to the diagonal of the kernel matrix to ensure
+            numerical stability
+        """
 
     def __repr__(self):
         name = self.__class__.__name__
@@ -78,6 +144,28 @@ class Model(ABC):
 
 
 class GPR(Model):
+    """
+    Full-rank Gaussian Process Regression model.
+
+    Parameters
+    ----------
+    kernel: Kernel
+        defines the covariance between data points.
+    noise: float
+        the aleatoric noise assumed to be present in the data.
+    solver: LinearSolver
+        solver of linear systems of the form `A @ x = y`.
+
+    Example
+    -------
+    >>> from mini_gpr.kernels import RBF
+    >>> from mini_gpr.models import GPR
+    >>> model = GPR(kernel=RBF(), noise=1e-3)
+    >>> model.fit(X, y)
+    >>> predictions = model.predict(T) # (T,)
+    >>> uncertainties = model.predictive_uncertainty(T) # (T,)
+    """
+
     @ensure_2d("X")
     def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]):
         self.X = X
@@ -149,7 +237,33 @@ class GPR(Model):
         return (L @ Z) + mu[:, None]
 
 
-class SparseModel(Model):
+class SoR(Model):
+    """
+    Subset of Regressors low-rank Gaussian Process Regression approximation.
+
+    Parameters
+    ----------
+    kernel
+        defines the covariance between data points.
+    sparse_points
+        the inducing points.
+    noise
+        the aleatoric noise assumed to be present in the data.
+    solver
+        solver of linear systems of the form `A @ x = y`.
+
+    Example
+    -------
+    >>> from mini_gpr.kernels import RBF
+    >>> from mini_gpr.models import SoR
+    >>> model = SoR(
+    ...    kernel=RBF(), sparse_points=np.random.rand(10, 2), noise=1e-3
+    ... )
+    >>> model.fit(X, y)
+    >>> predictions = model.predict(T) # (T,)
+    >>> uncertainties = model.latent_uncertainty(T) # (T,)
+    """
+
     def __init__(
         self,
         kernel: Kernel,
@@ -160,7 +274,7 @@ class SparseModel(Model):
         super().__init__(kernel, noise, solver)
         self.M = sparse_points
 
-    def with_new(self, kernel: Kernel, noise: float) -> "SparseModel":
+    def with_new(self, kernel: Kernel, noise: float) -> "SoR":
         return self.__class__(
             kernel,
             sparse_points=self.M,
@@ -168,8 +282,6 @@ class SparseModel(Model):
             solver=self.solver,
         )
 
-
-class SoR(SparseModel):
     @ensure_2d("X")
     def fit(self, X: Float[np.ndarray, "A D"], y: Float[np.ndarray, "A"]):
         # compute kernel matrices
@@ -214,16 +326,6 @@ class SoR(SparseModel):
 
     @property
     def log_likelihood(self) -> float:
-        """
-        For SoR, we approximate K_XX ≈ Q := K_XM K_MM^{-1} K_MX and use
-        Σ := Q + σ² I.
-
-        Using Woodbury:
-          Σ^{-1} = σ^{-2} I - K_XM (σ² K_MM + K_MX K_XM)^{-1} K_MX σ^{-2}
-
-        Using the matrix determinant lemma:
-          |Σ| = (σ²)^(n-m) * |σ² K_MM + K_MX K_XM| / |K_MM|
-        """
         n = len(self.y)
         m = len(self.M)
         sigma2 = float(self.noise**2)
