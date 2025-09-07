@@ -45,4 +45,4 @@ branch = true
 source = ["src/mini_gpr"]
 
 [tool.coverage.report]
-omit = ["tests/*", "test/*", "src/mini_gpr/viz.py"]
+omit = ["tests/*", "test/*", "src/mini_gpr/viz.py", "src/mini_gpr/tutorials.py"]

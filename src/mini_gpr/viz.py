@@ -98,14 +98,15 @@ def sample_kernel(
     kernel: Kernel,
     x: np.ndarray | None = None,
     n_samples: int = 4,
-    seed: int | None = None,
+    seed: int | None = 42,
+    **kwargs,
 ):
     if x is None:
         x = np.linspace(0, 6, 250)
     plt.figure(figsize=(3, 3))
     _model = GPR(kernel=kernel, noise=0.0)
-    y = _model.sample_prior(x, n_samples, rng=np.random.RandomState(seed))
-    plt.plot(x, y)
+    y = _model.sample_prior(x, n_samples, rng=seed)
+    plt.plot(x, y, **kwargs)
     for side in "top", "right":
         plt.gca().spines[side].set_visible(False)
     for side in "left", "bottom":

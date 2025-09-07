@@ -62,4 +62,5 @@ jobs:
       - name: install dependencies
         run: uv sync --all-extras
       - name: build docs
+        run: uv run sphinx-build docs build
 

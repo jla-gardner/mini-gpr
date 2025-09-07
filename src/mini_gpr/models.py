@@ -204,7 +204,7 @@ class GPR(Model):
                 "Try gradually increasing the noise."
             )
 
-        return -0.5 * quad - 0.5 * logdet - 0.5 * n * np.log(2 * np.pi)
+        return (-0.5 * quad - 0.5 * logdet - 0.5 * n * np.log(2 * np.pi)).item()
 
     def with_new(self, kernel: Kernel, noise: float) -> "GPR":
         return GPR(kernel, noise, self.solver)
@@ -358,7 +358,7 @@ class SoR(Model):
 
         logdet_Sigma = (n - m) * np.log(sigma2) - logdet_K + logdet_B
 
-        return -0.5 * (quad + logdet_Sigma + n * np.log(2 * np.pi))
+        return (-0.5 * (quad + logdet_Sigma + n * np.log(2 * np.pi))).item()
 
     @ensure_2d("locations")
     def sample_posterior(
