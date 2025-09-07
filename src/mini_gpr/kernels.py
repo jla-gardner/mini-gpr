@@ -179,7 +179,8 @@ class RBF(Kernel):
 
     .. math::
 
-        k(x, x^\prime) = \exp\left(-\frac{1}{2\sigma^2} (x - x^\prime)^2\right) \cdot s^2
+        k(x, x^\prime) = \exp\left(-\frac{1}{2\sigma^2}
+        (x - x^\prime)^2\right) \cdot s^2
 
     where:
 
@@ -288,7 +289,8 @@ class Periodic(Kernel):
 
     .. math::
 
-        k(x, x^\prime) = \exp\left(-\frac{1}{2\sigma^2} (x - x^\prime)^2\right) \cdot s^2
+        k(x, x^\prime) = \exp\left(-\frac{1}{2\sigma^2}
+        (x - x^\prime)^2\right) \cdot s^2
 
     where:
 
