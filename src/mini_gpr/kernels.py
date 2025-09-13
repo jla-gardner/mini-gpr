@@ -11,6 +11,13 @@ from mini_gpr.utils import ensure_2d
 # TODO: diag method
 
 
+def _make_all_positive(p: float | list[float]) -> float | list[float]:
+    if isinstance(p, list):
+        return [abs(x) for x in p]
+    else:
+        return abs(p)
+
+
 class Kernel(ABC):
     """
     Base class for all kernels.
@@ -199,13 +206,14 @@ class RBF(Kernel):
         sigma: float | list[float] = 1.0,
         scale: float = 1.0,
     ):
-        super().__init__(params={"sigma": sigma, "scale": scale})
+        super().__init__(
+            params={"sigma": _make_all_positive(sigma), "scale": scale}
+        )
 
     @ensure_2d("A", "B")
     def __call__(self, A, B):
         sigma, scale = self.params["sigma"], self.params["scale"]
         assert isinstance(scale, float | int)
-        sigma = np.abs(sigma)
 
         norm_A = A / sigma
         norm_B = B / sigma
@@ -273,7 +281,7 @@ class Linear(Kernel):
     """
 
     def __init__(self, m: float | list[float] = 0, scale: float = 1.0):
-        super().__init__(params={"m": m, "scale": scale})
+        super().__init__(params={"m": m, "scale": _make_all_positive(scale)})
 
     @ensure_2d("A", "B")
     def __call__(self, A, B):
@@ -306,7 +314,11 @@ class Periodic(Kernel):
         sigma: float | list[float] = 1.0,
     ):
         super().__init__(
-            params={"sigma": sigma, "period": period, "scale": scale}
+            params={
+                "sigma": _make_all_positive(sigma),
+                "period": period,
+                "scale": scale,
+            }
         )
 
     @ensure_2d("A", "B")

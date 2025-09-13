@@ -4,6 +4,7 @@ import numpy as np
 from jaxtyping import Float
 
 from mini_gpr.models import Model
+from mini_gpr.utils import ensure_1d, ensure_2d
 
 
 class Objective(Protocol):
@@ -74,7 +75,7 @@ class Convertor:
         for k, v in self.og_params.items():
             if isinstance(v, list):
                 right = left + len(v)
-                d[k] = params[left:right]
+                d[k] = [float(p) for p in params[left:right]]
             else:
                 right = left + 1
                 d[k] = float(params[left])
@@ -82,6 +83,8 @@ class Convertor:
         return d
 
 
+@ensure_1d("y")
+@ensure_2d("X")
 def optimise_model(
     m: Model,
     objective: Objective,

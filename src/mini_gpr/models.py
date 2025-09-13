@@ -7,7 +7,7 @@ from jaxtyping import Float
 
 from mini_gpr.kernels import Kernel
 from mini_gpr.solvers import LinearSolver, vanilla
-from mini_gpr.utils import ensure_2d, get_rng
+from mini_gpr.utils import ensure_2d, ensure_1d, get_rng
 
 
 class Model(ABC):
@@ -166,11 +166,12 @@ class GPR(Model):
     >>> uncertainties = model.predictive_uncertainty(T) # (T,)
     """
 
+    @ensure_1d("y")
     @ensure_2d("X")
     def fit(self, X: Float[np.ndarray, "N D"], y: Float[np.ndarray, "N"]):
         self.X = X
         self.K_XX = self.kernel(X, X) + self.noise**2 * np.eye(len(X))
-        self.c = self.solver(self.K_XX, y)
+        self.c = self.solver(self.K_XX, y).flatten()
         self.y = y
 
     @ensure_2d("T")

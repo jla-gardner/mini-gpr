@@ -7,6 +7,7 @@
    tutorials/model-optimisation
    tutorials/sparse-approx
    tutorials/kernels
+   tutorials/real-world-use-case
 
 .. toctree::
    :maxdepth: 2
