@@ -65,4 +65,11 @@ jobs:
         run: sudo apt-get install -y --no-install-recommends pandoc
       - name: build docs
         run: uv run sphinx-build docs build
+      - name: publish
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          publish_branch: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/
+          force_orphan: true
 
