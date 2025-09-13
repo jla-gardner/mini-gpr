@@ -7,7 +7,7 @@ from jaxtyping import Float
 
 from mini_gpr.kernels import Kernel
 from mini_gpr.solvers import LinearSolver, vanilla
-from mini_gpr.utils import ensure_2d, ensure_1d, get_rng
+from mini_gpr.utils import ensure_1d, ensure_2d, get_rng
 
 
 class Model(ABC):
