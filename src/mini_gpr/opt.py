@@ -77,7 +77,7 @@ class Convertor:
                 d[k] = params[left:right]
             else:
                 right = left + 1
-                d[k] = params[left]
+                d[k] = float(params[left])
             left = right
         return d
 

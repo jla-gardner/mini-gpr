@@ -1,3 +1,4 @@
+import math
 from typing import Literal
 
 import matplotlib.pyplot as plt
@@ -6,6 +7,7 @@ from jaxtyping import Float
 
 from mini_gpr.kernels import Kernel
 from mini_gpr.models import GPR, Model, SoR
+from mini_gpr.tutorials import get_grid
 
 try:
     from IPython.core.getipython import get_ipython
@@ -103,7 +105,9 @@ def sample_kernel(
 ):
     if x is None:
         x = np.linspace(0, 6, 250)
-    plt.figure(figsize=(3, 3))
+    # if no figure is currently active, create one
+    if len(plt.get_fignums()) == 0:
+        plt.figure(figsize=(3, 3))
     _model = GPR(kernel=kernel, noise=0.0)
     y = _model.sample_prior(x, n_samples, rng=seed)
     plt.plot(x, y, **kwargs)
@@ -111,3 +115,19 @@ def sample_kernel(
         plt.gca().spines[side].set_visible(False)
     for side in "left", "bottom":
         plt.gca().spines[side].set_position(("outward", 10))
+
+
+def sample_2d_kernel(k, cmap: str = "inferno", n: int = 4):
+    x, y, X = get_grid((-1, 1), (-1, 1), N=50)
+    _model = GPR(kernel=k, noise=0.0)
+    Z = _model.sample_prior(X, n_samples=n, rng=42)
+
+    l = math.ceil(math.sqrt(n))
+    _, axs = plt.subplots(l, l, figsize=(l * 1.5, l * 1.5))
+    for z, ax in zip(Z.T, axs.flat, strict=True):
+        ax.contourf(x, y, z.reshape(50, 50), cmap=cmap)
+    for ax in axs.flat:
+        ax.axis("off")
+        ax.set_aspect("equal")
+
+    plt.tight_layout()
